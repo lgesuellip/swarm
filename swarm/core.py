@@ -2,11 +2,10 @@
 import copy
 import json
 from collections import defaultdict
-from typing import List, Callable, Union
+from typing import List, Union, Dict
 
 # Package/library imports
 from openai import OpenAI
-
 
 # Local imports
 from .util import function_to_json, debug_print, merge_chunk
@@ -19,6 +18,7 @@ from .types import (
     Response,
     Result,
 )
+
 
 __CTX_VARS_NAME__ = "context_variables"
 
@@ -47,7 +47,10 @@ class Swarm:
         messages = [{"role": "system", "content": instructions}] + history
         debug_print(debug, "Getting chat completion for...:", messages)
 
-        tools = [function_to_json(f) for f in agent.functions]
+        tools = [
+            f["schema"] if isinstance(f, Dict) else function_to_json(f)
+            for f in agent.functions
+        ]
         # hide context_variables from model
         for tool in tools:
             params = tool["function"]["parameters"]
@@ -89,11 +92,16 @@ class Swarm:
     def handle_tool_calls(
         self,
         tool_calls: List[ChatCompletionMessageToolCall],
-        functions: List[AgentFunction],
+        functions: List[Union[AgentFunction, Dict]],
         context_variables: dict,
         debug: bool,
     ) -> Response:
-        function_map = {f.__name__: f for f in functions}
+        function_map = {}
+        for f in functions:
+            if isinstance(f, Dict):
+                function_map[f["schema"]["function"]["name"]] = f["function"]
+            else:
+                function_map[f.__name__] = f
         partial_response = Response(
             messages=[], agent=None, context_variables={})
 
